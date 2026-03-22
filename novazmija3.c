@@ -9,8 +9,17 @@
 #define WIDTH 40
 #define HEIGHT 20
 #define MAX_SNAKE 1000
+#define MAX_SCORES 500
 
 typedef struct { int x, y; } Point;
+
+typedef struct {
+    char name[50];
+    char score[10];
+    char timeStr[20];
+    char lives[10];
+    char reason[50];
+} ScoreEntry;
 
 /* ================= GLOBALS ================= */
 Point snake[MAX_SNAKE];
@@ -30,7 +39,7 @@ int soundOn = 1;
 time_t startTime;
 char playerName[50] = "";
 
-const char* SCORE_PATH = "C:\\Users\\Dark Prince\\source\\repos\\novazmija4\\x64\\Debug\\score.txt";
+const char* SCORE_PATH = "C:\\Users\\Dark Prince\\source\\repos\\novazmija5\\x64\\Debug\\score.txt";
 
 /* ================= CONSOLE ================= */
 void gotoxy(int x, int y) {
@@ -58,7 +67,8 @@ void resetSnake() {
     snake[0] = (Point){ WIDTH / 2, HEIGHT / 2 };
     snake[1] = (Point){ WIDTH / 2 - 1, HEIGHT / 2 };
     snake[2] = (Point){ WIDTH / 2 - 2, HEIGHT / 2 };
-    dx = 1; dy = 0;
+    dx = 1;
+    dy = 0;
 }
 
 void placeFood() {
@@ -67,9 +77,13 @@ void placeFood() {
         ok = 1;
         food.x = rand() % WIDTH;
         food.y = rand() % HEIGHT;
-        for (int i = 0; i < snakeLen; i++)
-            if (snake[i].x == food.x && snake[i].y == food.y)
+
+        for (int i = 0; i < snakeLen; i++) {
+            if (snake[i].x == food.x && snake[i].y == food.y) {
                 ok = 0;
+                break;
+            }
+        }
     } while (!ok);
 }
 
@@ -90,13 +104,13 @@ void drawGame() {
     gotoxy(0, 0);
     setColor(11);
 
-    /* PRVI RED – INFO */
     printf("SNAKE | Score: %04d | Lives: %d | Sound: %-3s",
-        score, lives, soundOn ? "ON" : "OFF");
+        score, lives,
+        soundOn ? "ON" : "OFF");
+
     if (paused) printf(" | PAUSED");
     printf("\n");
 
-    /* DRUGI RED – KONTROLE */
     printf("Controls: P Pause | M Menu | R Restart | V Mute | WASD / Arrows\n");
 
     setColor(7);
@@ -108,7 +122,9 @@ void drawGame() {
             int drawn = 0;
 
             if (x == food.x && y == food.y) {
-                setColor(12); printf("*"); setColor(7);
+                setColor(12);
+                printf("*");
+                setColor(7);
                 drawn = 1;
             }
 
@@ -125,6 +141,7 @@ void drawGame() {
         }
         printf("%c\n", 186);
     }
+
     drawBorderBottom();
 }
 
@@ -132,54 +149,177 @@ void drawGame() {
 void saveScore(const char* reason) {
     FILE* f = fopen(SCORE_PATH, "a");
     if (!f) return;
+
     int t = (int)(time(NULL) - startTime);
     fprintf(f, "%s | Score: %04d | Time: %d sec | Lives left: %d | Reason: %s\n",
         playerName, score, t, lives, reason);
+
     fclose(f);
+}
+
+/* ================= HIGHSCORE HELPERS ================= */
+int loadScores(ScoreEntry arr[], int maxCount) {
+    FILE* f = fopen(SCORE_PATH, "r");
+    if (!f) return 0;
+
+    int count = 0;
+    char line[256];
+
+    while (count < maxCount && fgets(line, sizeof(line), f)) {
+        arr[count].name[0] = 0;
+        arr[count].score[0] = 0;
+        arr[count].timeStr[0] = 0;
+        arr[count].lives[0] = 0;
+        arr[count].reason[0] = 0;
+
+        sscanf(line,
+            " %49[^|]| Score: %9[^|]| Time: %19[^|]| Lives left: %9[^|]| Reason: %49[^\n]",
+            arr[count].name,
+            arr[count].score,
+            arr[count].timeStr,
+            arr[count].lives,
+            arr[count].reason);
+
+        count++;
+    }
+
+    fclose(f);
+    return count;
+}
+
+void saveAllScores(ScoreEntry arr[], int count) {
+    FILE* f = fopen(SCORE_PATH, "w");
+    if (!f) return;
+
+    for (int i = 0; i < count; i++) {
+        fprintf(f, "%s | Score: %s | Time: %s | Lives left: %s | Reason: %s\n",
+            arr[i].name,
+            arr[i].score,
+            arr[i].timeStr,
+            arr[i].lives,
+            arr[i].reason);
+    }
+
+    fclose(f);
+}
+
+void deleteScoreAt(ScoreEntry arr[], int* count, int index) {
+    if (index < 0 || index >= *count) return;
+
+    for (int i = index; i < *count - 1; i++) {
+        arr[i] = arr[i + 1];
+    }
+
+    (*count)--;
+    saveAllScores(arr, *count);
+}
+
+void clearAllScores() {
+    FILE* f = fopen(SCORE_PATH, "w");
+    if (f) fclose(f);
 }
 
 /* ================= HIGHSCORE ================= */
-int highscoreHasData() {
-    FILE* f = fopen(SCORE_PATH, "r");
-    if (!f) return 0;
-    char line[256];
-    int ok = fgets(line, 255, f) != NULL;
-    fclose(f);
-    return ok;
-}
-
 void showHighscore() {
-    system("cls");
-    if (!highscoreHasData()) {
-        printf("Nema high score zapisa.\n");
-        (void)_getch();
-        return;
-    }
+    ScoreEntry entries[MAX_SCORES];
+    int selected = 0;
 
-    FILE* f = fopen(SCORE_PATH, "r");
-    printf("%-22s %-8s %-10s %-14s %-20s\n",
-        "IME", "SCORE", "TIME", "LIVES", "REASON");
-    printf("----------------------------------------------------------------------\n");
+    while (1) {
+        int count = loadScores(entries, MAX_SCORES);
 
-    char line[256];
-    while (fgets(line, 255, f)) {
-        char i[50], s[10], t[10], l[10], r[50];
-        int parsed = sscanf(line,
-            "%49[^|]| Score: %9[^|]| Time: %9[^|]| Lives left: %9[^|]| Reason: %49[^\n]",
-            i, s, t, l, r);
-        (void)parsed;
-        printf("%-22s %-8s %-10s %-14s %-20s\n", i, s, t, l, r);
+        system("cls");
+        printf("=============== HIGHSCORE ===============\n\n");
+
+        if (count <= 0) {
+            printf("Nema high score zapisa.\n\n");
+            printf("D - obrisi sve\n");
+            printf("ESC - povratak\n");
+
+            char c = _getch();
+            if (c == 'd' || c == 'D') {
+                clearAllScores();
+            }
+            else if (c == 27) {
+                return;
+            }
+            continue;
+        }
+
+        if (selected < 0) selected = 0;
+        if (selected >= count) selected = count - 1;
+
+        printf("Strelice gore/dolje = odabir | DEL = obrisi zapis | D = obrisi sve | ESC = izlaz\n\n");
+
+        printf("%-3s %-22s %-8s %-10s %-14s %-20s\n",
+            "", "IME", "SCORE", "TIME", "LIVES", "REASON");
+        printf("-------------------------------------------------------------------------------\n");
+
+        for (int i = 0; i < count; i++) {
+            if (i == selected) {
+                setColor(240);
+                printf(">  %-22s %-8s %-10s %-14s %-20s\n",
+                    entries[i].name,
+                    entries[i].score,
+                    entries[i].timeStr,
+                    entries[i].lives,
+                    entries[i].reason);
+                setColor(7);
+            }
+            else {
+                printf("   %-22s %-8s %-10s %-14s %-20s\n",
+                    entries[i].name,
+                    entries[i].score,
+                    entries[i].timeStr,
+                    entries[i].lives,
+                    entries[i].reason);
+            }
+        }
+
+        char c = _getch();
+
+        if (c == -32 || c == 0) {
+            c = _getch();
+
+            if (c == 72 && selected > 0) {
+                selected--;
+            }
+            else if (c == 80 && selected < count - 1) {
+                selected++;
+            }
+            else if (c == 83 && count > 0) {
+                system("cls");
+                printf("Obrisati zapis za igraca \"%s\"? (Y/N)\n", entries[selected].name);
+                char conf = _getch();
+
+                if (conf == 'y' || conf == 'Y') {
+                    deleteScoreAt(entries, &count, selected);
+                    if (selected >= count && selected > 0) selected--;
+                }
+            }
+        }
+        else if (c == 'd' || c == 'D') {
+            system("cls");
+            printf("Obrisati SVE highscore zapise? (Y/N)\n");
+            char conf = _getch();
+
+            if (conf == 'y' || conf == 'Y') {
+                clearAllScores();
+                selected = 0;
+            }
+        }
+        else if (c == 27) {
+            return;
+        }
     }
-    fclose(f);
-    (void)_getch();
 }
 
 /* ================= INPUT ================= */
 void inputGame() {
     if (!_kbhit()) return;
+
     char c = _getch();
 
-    if (c == -32) {
+    if (c == -32 || c == 0) {
         c = _getch();
         if (!paused) {
             if (c == 72 && dy == 0) { dx = 0; dy = -1; }
@@ -206,33 +346,45 @@ void inputGame() {
 
 /* ================= UPDATE ================= */
 void updateGame() {
-    for (int i = snakeLen - 1; i > 0; i--) snake[i] = snake[i - 1];
+    for (int i = snakeLen - 1; i > 0; i--) {
+        snake[i] = snake[i - 1];
+    }
+
     snake[0].x += dx;
     snake[0].y += dy;
 
     if (snake[0].x < 0 || snake[0].x >= WIDTH ||
         snake[0].y < 0 || snake[0].y >= HEIGHT) {
-        soundWall(); soundLifeLost();
+        soundWall();
+        soundLifeLost();
         lives--;
-        if (lives <= 0) { saveScore("Wall collision"); returnToMenu = 1; }
+
+        if (lives <= 0) {
+            saveScore("Wall collision");
+            returnToMenu = 1;
+        }
+
         resetSnake();
         return;
     }
 
-    for (int i = 1; i < snakeLen; i++)
+    for (int i = 1; i < snakeLen; i++) {
         if (snake[0].x == snake[i].x && snake[0].y == snake[i].y) {
             soundSelf();
             saveScore("Self collision");
             returnToMenu = 1;
             return;
         }
+    }
 
     if (snake[0].x == food.x && snake[0].y == food.y) {
         soundEat();
+
         if (snakeLen < MAX_SNAKE) {
             snake[snakeLen] = snake[snakeLen - 1];
             snakeLen++;
         }
+
         score += (score < 100) ? 1 : 2;
         placeFood();
     }
@@ -241,21 +393,39 @@ void updateGame() {
 /* ================= MENU ================= */
 int menu() {
     const char* items[] = {
-        "Start game","Unesi ime igraca","Highscore","Izlaz"
+        "Start game",
+        "Unesi ime igraca",
+        "Highscore",
+        "Izlaz"
     };
+
     int sel = 0;
     soundMenu();
 
     while (1) {
         system("cls");
         printf("===== S N A K E =====\n\n");
+
         for (int i = 0; i < 4; i++) {
-            if (i == sel) { setColor(240); printf(" > %s\n", items[i]); setColor(7); }
-            else printf("   %s\n", items[i]);
+            if (i == sel) {
+                setColor(240);
+                printf(" > %s\n", items[i]);
+                setColor(7);
+            }
+            else {
+                printf("   %s\n", items[i]);
+            }
         }
+
         char c = _getch();
-        if (c == -32) { c = _getch(); if (c == 72 && sel > 0)sel--; if (c == 80 && sel < 3)sel++; }
-        else if (c == 13) return sel;
+        if (c == -32 || c == 0) {
+            c = _getch();
+            if (c == 72 && sel > 0) sel--;
+            if (c == 80 && sel < 3) sel++;
+        }
+        else if (c == 13) {
+            return sel;
+        }
     }
 }
 
@@ -269,7 +439,12 @@ int main() {
         int choice = menu();
 
         if (choice == 3) break;
-        if (choice == 2) { showHighscore(); continue; }
+
+        if (choice == 2) {
+            showHighscore();
+            continue;
+        }
+
         if (choice == 1) {
             system("cls");
             printf("Unesite ime igraca: ");
@@ -277,28 +452,41 @@ int main() {
             playerName[strcspn(playerName, "\n")] = 0;
         }
 
-        score = 0; lives = 3;
-        paused = returnToMenu = restartGame = 0;
+        if (strlen(playerName) == 0) {
+            strcpy(playerName, "Nepoznati igrac");
+        }
+
+        score = 0;
+        lives = 3;
+        paused = 0;
+        returnToMenu = 0;
+        restartGame = 0;
 
         startTime = time(NULL);
         resetSnake();
         placeFood();
 
-        CONSOLE_CURSOR_INFO ci = { 1,FALSE };
+        CONSOLE_CURSOR_INFO ci = { 1, FALSE };
         SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &ci);
+
+        system("cls");
 
         while (!returnToMenu) {
             if (restartGame) {
                 restartGame = 0;
-                score = 0; lives = 3;
+                score = 0;
+                lives = 3;
+                paused = 0;
                 resetSnake();
                 placeFood();
             }
+
             inputGame();
             if (!paused) updateGame();
             drawGame();
             Sleep(delayMs);
         }
     }
+
     return 0;
 }
