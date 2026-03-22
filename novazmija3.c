@@ -30,7 +30,7 @@ int soundOn = 1;
 time_t startTime;
 char playerName[50] = "";
 
-const char* SCORE_PATH ="C:\\Users\\Dark Prince\\source\\repos\\novazmija3\\x64\\Debug\\score.txt";
+const char* SCORE_PATH = "C:\\Users\\Dark Prince\\source\\repos\\novazmija4\\x64\\Debug\\score.txt";
 
 /* ================= CONSOLE ================= */
 void gotoxy(int x, int y) {
@@ -86,18 +86,17 @@ void drawBorderBottom() {
     printf("%c\n", 188);
 }
 
-/* ======= OVDJE JE IZMJENA (2 RETKA) ======= */
 void drawGame() {
     gotoxy(0, 0);
     setColor(11);
 
-    /* PRVI RED – INFO */
-    printf("SNAKE | Score: %04d | Lives: %d | Sound: %s",
+    /* PRVI RED â€“ INFO */
+    printf("SNAKE | Score: %04d | Lives: %d | Sound: %-3s",
         score, lives, soundOn ? "ON" : "OFF");
     if (paused) printf(" | PAUSED");
     printf("\n");
 
-    /* DRUGI RED – KONTROLE */
+    /* DRUGI RED â€“ KONTROLE */
     printf("Controls: P Pause | M Menu | R Restart | V Mute | WASD / Arrows\n");
 
     setColor(7);
